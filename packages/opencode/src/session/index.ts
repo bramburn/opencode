@@ -684,7 +684,7 @@ export namespace Session {
     ]
     log.debug("Sending messages to model", { messages: JSON.stringify(modelMessages, null, 2) })
 
-    const result = streamText({
+    const stream = streamText({
       onError() {},
       maxRetries: 10,
       maxOutputTokens: outputLimit,
@@ -709,7 +709,8 @@ export namespace Session {
         ],
       }),
     })
-    return processStream(assistantMsg, model.info, result)
+    const result = await processStream(assistantMsg, model.info, stream)
+    return result
   }
 
   async function processStream(
@@ -1031,13 +1032,14 @@ export namespace Session {
     ]
     log.debug("Sending summarize messages to model", { messages: JSON.stringify(summarizeMessages, null, 2) })
 
-    const result = streamText({
+    const stream = streamText({
       abortSignal: abort.signal,
       model: model.language,
       messages: summarizeMessages,
     })
 
-    return processStream(next, model.info, result)
+    const result = await processStream(next, model.info, stream)
+    return result
   }
 
   function lock(sessionID: string) {

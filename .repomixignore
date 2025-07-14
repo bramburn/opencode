@@ -1,0 +1,14 @@
+# Add patterns to ignore here, one per line
+# Example:
+# *.log
+# tmp/
+node_modules/
+.exe
+.DS_Store
+node_modules
+.opencode
+.sst
+.env
+.idea
+.vscode
+openapi.json

@@ -7,6 +7,13 @@ import { ScrapCommand } from "./scrap"
 import { SnapshotCommand } from "./snapshot"
 import { SettingsCommand } from "./settings"
 
+/**
+ * DebugCommand is the root command for various debug utilities.
+ * It provides subcommands for LSP, ripgrep, file operations, scrap data,
+ * snapshots, settings, and a wait command that blocks for 24 hours.
+ * Requires at least one subcommand to be specified.
+ */
+
 export const DebugCommand = cmd({
   command: "debug",
   builder: (yargs) =>

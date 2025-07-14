@@ -62,15 +62,32 @@ export namespace Log {
     const dir = path.join(Global.Path.data, "log")
     await fs.mkdir(dir, { recursive: true })
     cleanup(dir)
-    if (options.print) return
-    logpath = path.join(dir, new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log")
-    const logfile = Bun.file(logpath)
-    await fs.truncate(logpath).catch(() => {})
-    const writer = logfile.writer()
-    process.stderr.write = (msg) => {
-      writer.write(msg)
-      writer.flush()
-      return true
+
+    if (process.env['OPENCODE_DEBUG_LOG'] === 'true') {
+      options.print = true // Also print to stderr
+      setLevel("DEBUG")
+      logpath = path.join(dir, new Date().toISOString().replace(/:/g, "-") + ".log")
+      const logfile = Bun.file(logpath)
+      await fs.truncate(logpath).catch(() => {})
+      const writer = logfile.writer()
+      const originalWrite = process.stderr.write
+      process.stderr.write = (msg) => {
+        writer.write(msg)
+        writer.flush()
+        return originalWrite.call(process.stderr, msg)
+      }
+    } else if (options.print) {
+      return
+    } else {
+      logpath = path.join(dir, new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log")
+      const logfile = Bun.file(logpath)
+      await fs.truncate(logpath).catch(() => {})
+      const writer = logfile.writer()
+      process.stderr.write = (msg) => {
+        writer.write(msg)
+        writer.flush()
+        return true
+      }
     }
   }
 

@@ -319,6 +319,20 @@ export namespace Session {
     return part
   }
 
+  /**
+   * Handles a chat session by processing user input, managing conversation history,
+   * and generating assistant responses using the specified AI model.
+   * 
+   * @param input - Chat request parameters including session details and message parts
+   * @returns A promise resolving to the processed chat stream response
+   * 
+   * @remarks
+   * - Manages session state including reverts and message trimming
+   * - Handles file attachments and text processing
+   * - Applies system prompts and tool integrations
+   * - Streams the assistant response back to the client
+   */
+  
   export async function chat(input: {
     sessionID: string
     messageID: string
@@ -585,31 +599,38 @@ export namespace Session {
         description: item.description,
         inputSchema: item.parameters as ZodSchema,
         async execute(args) {
-          const result = await item.execute(args, {
-            sessionID: input.sessionID,
-            abort: abort.signal,
-            messageID: assistantMsg.id,
-            metadata: async () => {
-              /*
-              const match = toolCalls[opts.toolCallId]
-              if (match && match.state.status === "running") {
-                await updatePart({
-                  ...match,
-                  state: {
-                    title: val.title,
-                    metadata: val.metadata,
-                    status: "running",
-                    input: args.input,
-                    time: {
-                      start: Date.now(),
+          log.debug(`Executing tool: ${item.id}`, { args })
+          try {
+            const result = await item.execute(args, {
+              sessionID: input.sessionID,
+              abort: abort.signal,
+              messageID: assistantMsg.id,
+              metadata: async () => {
+                /*
+                const match = toolCalls[opts.toolCallId]
+                if (match && match.state.status === "running") {
+                  await updatePart({
+                    ...match,
+                    state: {
+                      title: val.title,
+                      metadata: val.metadata,
+                      status: "running",
+                      input: args.input,
+                      time: {
+                        start: Date.now(),
+                      },
                     },
-                  },
-                })
-              }
-              */
-            },
-          })
-          return result
+                  })
+                }
+                */
+              },
+            })
+            log.debug(`Tool ${item.id} result`, { result })
+            return result
+          } catch (e) {
+            log.error(`Tool ${item.id} failed`, { error: e })
+            throw e
+          }
         },
         toModelOutput(result) {
           return {
@@ -625,14 +646,22 @@ export namespace Session {
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
-        const result = await execute(args, opts)
-        const output = result.content
-          .filter((x: any) => x.type === "text")
-          .map((x: any) => x.text)
-          .join("\n\n")
+        log.debug(`Executing MCP tool: ${key}`, { args })
+        try {
+          const result = await execute(args, opts)
+          const output = result.content
+            .filter((x: any) => x.type === "text")
+            .map((x: any) => x.text)
+            .join("\n\n")
 
-        return {
-          output,
+          const finalResult = {
+            output,
+          }
+          log.debug(`MCP tool ${key} result`, { result: finalResult })
+          return finalResult
+        } catch (e) {
+          log.error(`MCP tool ${key} failed`, { error: e })
+          throw e
         }
       }
       item.toModelOutput = (result) => {
@@ -644,6 +673,17 @@ export namespace Session {
       tools[key] = item
     }
 
+    const modelMessages = [
+      ...system.map(
+        (x): ModelMessage => ({
+          role: "system",
+          content: x,
+        }),
+      ),
+      ...MessageV2.toModelMessage(msgs),
+    ]
+    log.debug("Sending messages to model", { messages: JSON.stringify(modelMessages, null, 2) })
+
     const result = streamText({
       onError() {},
       maxRetries: 10,
@@ -651,15 +691,7 @@ export namespace Session {
       abortSignal: abort.signal,
       stopWhen: stepCountIs(1000),
       providerOptions: model.info.options,
-      messages: [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
-        ...MessageV2.toModelMessage(msgs),
-      ],
+      messages: modelMessages,
       temperature: model.info.temperature ? 0 : undefined,
       tools: model.info.tool_call === false ? undefined : tools,
       model: wrapLanguageModel({
@@ -979,27 +1011,30 @@ export namespace Session {
     }
     await updateMessage(next)
 
+    const summarizeMessages: ModelMessage[] = [
+      ...system.map(
+        (x): ModelMessage => ({
+          role: "system",
+          content: x,
+        }),
+      ),
+      ...MessageV2.toModelMessage(filtered),
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Provide a detailed but concise summary of our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.",
+          },
+        ],
+      } as ModelMessage,
+    ]
+    log.debug("Sending summarize messages to model", { messages: JSON.stringify(summarizeMessages, null, 2) })
+
     const result = streamText({
       abortSignal: abort.signal,
       model: model.language,
-      messages: [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
-        ...MessageV2.toModelMessage(filtered),
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Provide a detailed but concise summary of our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.",
-            },
-          ],
-        },
-      ],
+      messages: summarizeMessages,
     })
 
     return processStream(next, model.info, result)

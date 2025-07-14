@@ -1,0 +1,38 @@
+services:
+  opencode-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: opencode-dev
+    working_dir: /app
+    volumes:
+      # Mount the entire project directory
+      - .:/app
+      # Exclude node_modules to avoid conflicts
+      - /app/node_modules
+      # Mount a volume for Go module cache
+      - go-mod-cache:/go/pkg/mod
+      # Mount a volume for Bun cache
+      - bun-cache:/root/.bun
+    ports:
+      # Default port for opencode serve command
+      - "4096:4096"
+      # Additional ports for development
+      - "3000:3000"
+      - "8080:8080"
+    environment:
+      - NODE_ENV=development
+      - BUN_INSTALL_CACHE_DIR=/root/.bun
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+    networks:
+      - opencode-network
+
+volumes:
+  go-mod-cache:
+  bun-cache:
+
+networks:
+  opencode-network:
+    driver: bridge

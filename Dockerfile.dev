@@ -1,0 +1,101 @@
+# Use Ubuntu as base image for better compatibility
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV BUN_VERSION=1.2.14
+ENV GO_VERSION=1.24.0
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    build-essential \
+    ca-certificates \
+    unzip \
+    bash \
+    vim \
+    nano \
+    htop \
+    tree \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Go
+RUN wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
+    rm go${GO_VERSION}.linux-amd64.tar.gz
+
+# Add Go to PATH
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV GOPATH="/go"
+ENV GOBIN="/go/bin"
+ENV PATH="${GOBIN}:${PATH}"
+
+# Install Bun
+# Installs Bun JavaScript runtime using the specified BUN_VERSION environment variable
+RUN curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}"
+ENV PATH="/root/.bun/bin:${PATH}"
+
+# Create app directory
+WORKDIR /app
+
+# Copy the entire application first
+COPY . .
+
+# Fix line endings for all shell scripts (Windows CRLF to Unix LF)
+RUN find . -type f \( -name "*.sh" -o -name "hooks" -o -name "stainless" -o -name "release" \) -exec sed -i 's/\r$//' {} \; && \
+    find ./scripts -type f -exec sed -i 's/\r$//' {} \; && \
+    chmod +x ./scripts/* 2>/dev/null || true
+
+# Temporarily remove postinstall script to avoid line ending issues during build
+RUN cp package.json package.json.backup && \
+    sed 's/"postinstall": ".*"/"postinstall": "echo \\"Skipping git hooks setup in Docker\\""/' package.json > package.json.tmp && \
+    mv package.json.tmp package.json
+
+# Install Bun dependencies
+RUN bun install
+
+# Restore original package.json
+RUN mv package.json.backup package.json
+
+# Download Go dependencies
+WORKDIR /app/packages/tui
+RUN go mod download
+
+WORKDIR /app/packages/tui/sdk
+RUN go mod download
+
+# Return to app directory
+WORKDIR /app
+
+# Build Go TUI binary
+WORKDIR /app/packages/tui
+RUN go build -o opencode ./cmd/opencode
+
+# Return to app directory
+WORKDIR /app
+
+# Create a startup script
+# Executes a shell script that starts with a bash shebang (#!/bin/bash)
+RUN echo '#!/bin/bash\n\
+    echo "=== OpenCode Development Environment ==="\n\
+    echo "Available commands:"\n\
+echo "  bun install                    - Install dependencies"\n\
+echo "  bun run dev                    - Run the main application"\n\
+echo "  bun run packages/opencode/src/index.ts - Run opencode directly"\n\
+echo "  cd packages/tui && go build ./cmd/opencode - Build Go TUI"\n\
+echo "  cd packages/tui && ./opencode  - Run Go TUI"\n\
+echo ""\n\
+echo "Project structure:"\n\
+echo "  /app                           - Project root"\n\
+echo "  /app/packages/opencode         - Main TypeScript application"\n\
+echo "  /app/packages/tui              - Go TUI application"\n\
+echo ""\n\
+echo "Starting interactive shell..."\n\
+exec "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
+
+# Set the entrypoint
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/bin/bash"]

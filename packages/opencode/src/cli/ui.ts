@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { EOL } from "os"
+import { styleText } from "util"
 import { NamedError } from "../util/error"
 
 export namespace UI {
@@ -30,12 +31,12 @@ export namespace UI {
 
   export function println(...message: string[]) {
     print(...message)
-    Bun.stderr.write(EOL)
+    process.stderr.write(EOL)
   }
 
   export function print(...message: string[]) {
     blank = false
-    Bun.stderr.write(message.join(" "))
+    process.stderr.write(message.join(" "))
   }
 
   let blank = false
@@ -49,7 +50,7 @@ export namespace UI {
     const result = []
     for (const row of LOGO) {
       if (pad) result.push(pad)
-      result.push(Bun.color("gray", "ansi"))
+      result.push("\x1b[90m")
       result.push(row[0])
       result.push("\x1b[0m")
       result.push(row[1])

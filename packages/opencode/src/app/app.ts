@@ -54,11 +54,11 @@ export namespace App {
     log.info("git", { git })
 
     const data = path.join(Global.Path.data, "project", git ? directory(git) : "global")
-    const stateFile = Bun.file(path.join(data, APP_JSON))
+    const stateFile = nodeFile(path.join(data, APP_JSON))
     const state = (await stateFile.json().catch(() => ({}))) as {
       initialized: number
     }
-    await stateFile.write(JSON.stringify(state))
+    await nodeWrite(path.join(data, APP_JSON), JSON.stringify(state))
 
     const services = new Map<
       any,

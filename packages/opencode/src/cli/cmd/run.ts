@@ -62,7 +62,13 @@ export const RunCommand = cmd({
   handler: async (args) => {
     let message = args.message.join(" ")
 
-    if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
+    if (!process.stdin.isTTY) {
+      const chunks = []
+      for await (const chunk of process.stdin) {
+        chunks.push(chunk)
+      }
+      message += "\n" + Buffer.concat(chunks).toString('utf8')
+    }
 
     await bootstrap({ cwd: process.cwd() }, async () => {
       const session = await (async () => {

@@ -3,6 +3,7 @@ import { Bus } from "../bus"
 import { File } from "../file"
 import { Log } from "../util/log"
 import path from "path"
+import { nodeSpawn } from "../util/node-process"
 
 import * as Formatter from "./formatter"
 
@@ -46,8 +47,7 @@ export namespace Format {
 
       for (const item of await getFormatter(ext)) {
         log.info("running", { command: item.command })
-        const proc = Bun.spawn({
-          cmd: item.command.map((x) => x.replace("$FILE", file)),
+        const proc = nodeSpawn(item.command.map((x) => x.replace("$FILE", file)), {
           cwd: App.info().path.cwd,
           env: item.environment,
           stdout: "ignore",

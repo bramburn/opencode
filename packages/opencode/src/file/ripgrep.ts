@@ -8,7 +8,7 @@ import { lazy } from "../util/lazy"
 import { execa } from "execa"
 import { Fzf } from "./fzf"
 import { nodeFile, nodeWrite, fileExists } from "../util/node-fs"
-import { nodeSpawn, readableStreamToText } from "../util/node-process"
+import { nodeSpawn, readableStreamToText, nodeWhich } from "../util/node-process"
 
 export namespace Ripgrep {
   const Stats = z.object({
@@ -124,7 +124,7 @@ export namespace Ripgrep {
   )
 
   const state = lazy(async () => {
-    let filepath = Bun.which("rg")
+    let filepath = await nodeWhich("rg")
     if (filepath) return { filepath }
     filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
 
@@ -162,16 +162,16 @@ export namespace Ripgrep {
           })
       }
       if (config.extension === "zip") {
-        const proc = Bun.spawn(["unzip", "-j", archivePath, "*/rg.exe", "-d", Global.Path.bin], {
+        const proc = nodeSpawn(["unzip", "-j", archivePath, "*/rg.exe", "-d", Global.Path.bin], {
           cwd: Global.Path.bin,
           stderr: "pipe",
           stdout: "ignore",
         })
-        await proc.exited
-        if (proc.exitCode !== 0)
+        const exitCode = await proc.exited
+        if (exitCode !== 0)
           throw new ExtractionFailedError({
             filepath: archivePath,
-            stderr: await Bun.readableStreamToText(proc.stderr),
+            stderr: proc.stderr ? await readableStreamToText(proc.stderr) : "",
           })
       }
       await fs.unlink(archivePath)

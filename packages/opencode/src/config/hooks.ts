@@ -5,6 +5,7 @@ import { Session } from "../session"
 import { Log } from "../util/log"
 import { Config } from "./config"
 import path from "path"
+import { nodeSpawn } from "../util/node-process"
 
 export namespace ConfigHooks {
   const log = Log.create({ service: "config.hooks" })
@@ -21,8 +22,7 @@ export namespace ConfigHooks {
           file: payload.properties.file,
           command: item.command,
         })
-        Bun.spawn({
-          cmd: item.command.map((x) => x.replace("$FILE", payload.properties.file)),
+        nodeSpawn(item.command.map((x) => x.replace("$FILE", payload.properties.file)), {
           env: item.environment,
           cwd: app.path.cwd,
           stdout: "ignore",
@@ -38,8 +38,7 @@ export namespace ConfigHooks {
           log.info("session_completed", {
             command: item.command,
           })
-          Bun.spawn({
-            cmd: item.command,
+          nodeSpawn(item.command, {
             cwd: App.info().path.cwd,
             env: item.environment,
             stdout: "ignore",

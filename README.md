@@ -25,7 +25,7 @@
 curl -fsSL https://opencode.ai/install | bash
 
 # Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
+npm i -g opencode-ai@latest        # or pnpm/yarn
 brew install sst/tap/opencode      # macOS
 paru -S opencode-bin               # Arch Linux
 ```
@@ -43,19 +43,36 @@ For any new features we'd appreciate it if you could open an issue first to disc
 > **Note**: Please talk to us via github issues before spending time working on
 > a new feature
 
-To run opencode locally you need.
+To run opencode locally you need:
 
-- Bun
+- Node.js 18+ (see `.nvmrc` for the exact version)
+- pnpm (recommended package manager)
 - Golang 1.24.x
 
-And run.
+And run:
 
 ```bash
-$ bun install
-$ bun run packages/opencode/src/index.ts
+$ pnpm install
+$ pnpm --filter opencode dev
+```
+
+Or to run a specific command:
+
+```bash
+$ pnpm --filter opencode dev --help
+```
+
+If you're in the opencode package directory, you can use the shorter form:
+
+```bash
+$ cd packages/opencode
+$ pnpm dev
+$ pnpm dev --help
 ```
 
 #### Development Notes
+
+**Runtime Migration**: This project has been migrated from Bun to Node.js for better ecosystem compatibility. All Bun-specific APIs have been replaced with Node.js equivalents.
 
 **API Client**: After making changes to the TypeScript API endpoints in `packages/opencode/src/server/server.ts`, you will need the opencode team to generate a new stainless sdk for the clients.
 

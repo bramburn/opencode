@@ -12,6 +12,9 @@ import { Bus } from "../../bus"
 import { Log } from "../../util/log"
 import { FileWatcher } from "../../file/watch"
 import { Mode } from "../../session/mode"
+import { fileURLToPath } from "url"
+import { nodeFile, nodeWrite, fileExists } from "../../util/node-fs"
+import { nodeSpawn } from "../../util/node-process"
 
 export const TuiCommand = cmd({
   command: "$0 [project]",
@@ -58,26 +61,15 @@ export const TuiCommand = cmd({
         })
 
         let cmd = ["go", "run", "./main.go"]
-        let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
-        if (Bun.embeddedFiles.length > 0) {
-          const blob = Bun.embeddedFiles[0] as File
-          let binaryName = blob.name
-          if (process.platform === "win32" && !binaryName.endsWith(".exe")) {
-            binaryName += ".exe"
-          }
-          const binary = path.join(Global.Path.cache, "tui", binaryName)
-          const file = Bun.file(binary)
-          if (!(await file.exists())) {
-            await Bun.write(file, blob, { mode: 0o755 })
-            await fs.chmod(binary, 0o755)
-          }
-          cwd = process.cwd()
-          cmd = [binary]
-        }
+        let cwd = fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
+
+        // Note: Bun.embeddedFiles is not available in Node.js
+        // For Node.js, we'll always use the Go source code approach
+        // In production builds, this would need to be handled differently
         Log.Default.info("tui", {
           cmd,
         })
-        const proc = Bun.spawn({
+        const proc = nodeSpawn({
           cmd: [
             ...cmd,
             ...(args.model ? ["--model", args.model] : []),
@@ -126,7 +118,7 @@ export const TuiCommand = cmd({
       if (result === "needs_provider") {
         UI.empty()
         UI.println(UI.logo("   "))
-        const result = await Bun.spawn({
+        const result = await nodeSpawn({
           cmd: [...getOpencodeCommand(), "auth", "login"],
           cwd: process.cwd(),
           stdout: "inherit",
@@ -142,7 +134,7 @@ export const TuiCommand = cmd({
 
 /**
  * Get the correct command to run opencode CLI
- * In development: ["bun", "run", "packages/opencode/src/index.ts"]
+ * In development: ["node", "run", "packages/opencode/src/index.ts"]
  * In production: ["/path/to/opencode"]
  */
 function getOpencodeCommand(): string[] {
@@ -154,8 +146,8 @@ function getOpencodeCommand(): string[] {
   const execPath = process.execPath.toLowerCase()
 
   if (Installation.isDev()) {
-    // In development, use bun to run the TypeScript entry point
-    return [execPath, "run", process.argv[1]]
+    // In development, use tsx to run the TypeScript entry point
+    return ["tsx", process.argv[1]]
   }
 
   // In production, use the current executable path

@@ -1,9 +1,9 @@
 import { App } from "../app/app"
-import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
 import { Ripgrep } from "../file/ripgrep"
 import { Log } from "../util/log"
+import { execa } from "execa"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
@@ -25,25 +25,36 @@ export namespace Snapshot {
     }
 
     if (await fs.mkdir(git, { recursive: true })) {
-      await $`git init`
-        .env({
+      await execa('git', ['init'], {
+        env: {
           ...process.env,
           GIT_DIR: git,
           GIT_WORK_TREE: app.path.root,
-        })
-        .quiet()
-        .nothrow()
+        },
+        stdio: 'pipe',
+        reject: false
+      })
       log.info("initialized")
     }
 
-    await $`git --git-dir ${git} add .`.quiet().cwd(app.path.cwd).nothrow()
+    await execa('git', ['--git-dir', git, 'add', '.'], {
+      cwd: app.path.cwd,
+      stdio: 'pipe',
+      reject: false
+    })
     log.info("added files")
 
-    const result =
-      await $`git --git-dir ${git} commit --allow-empty -m "snapshot" --author="opencode <mail@opencode.ai>"`
-        .quiet()
-        .cwd(app.path.cwd)
-        .nothrow()
+    const result = await execa('git', [
+      '--git-dir', git,
+      'commit',
+      '--allow-empty',
+      '-m', 'snapshot',
+      '--author=opencode <mail@opencode.ai>'
+    ], {
+      cwd: app.path.cwd,
+      stdio: 'pipe',
+      reject: false
+    })
     log.info("commit")
 
     const match = result.stdout.toString().match(/\[.+ ([a-f0-9]+)\]/)
@@ -55,7 +66,10 @@ export namespace Snapshot {
     log.info("restore", { commit })
     const app = App.info()
     const git = gitdir(sessionID)
-    await $`git --git-dir=${git} checkout ${commit} --force`.quiet().cwd(app.path.root)
+    await execa('git', ['--git-dir=' + git, 'checkout', commit, '--force'], {
+      cwd: app.path.root,
+      stdio: 'pipe'
+    })
   }
 
   function gitdir(sessionID: string) {

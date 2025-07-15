@@ -24,6 +24,14 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
   },
+  // Vite configuration for explicit bundling control
+  vite: {
+    server: {
+      port: 4321,
+    },
+    clearScreen: false,
+    logLevel: 'info'
+  },
   markdown: {
     rehypePlugins: [rehypeHeadingIds, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
   },

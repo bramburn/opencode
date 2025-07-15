@@ -2,7 +2,9 @@ import { z } from "zod"
 import { Tool } from "./tool"
 import { App } from "../app/app"
 import * as path from "path"
-import DESCRIPTION from "./ls.txt"
+import { loadText } from "../util/text-loader"
+
+const DESCRIPTION = loadText("./ls.txt", import.meta.url)
 
 export const IGNORE_PATTERNS = [
   "node_modules/",

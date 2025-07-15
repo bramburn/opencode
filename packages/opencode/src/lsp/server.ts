@@ -4,9 +4,11 @@ import path from "path"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
-import { $ } from "bun"
+import { execa } from "execa"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
+import { nodeWhich, nodeSpawn } from "../util/node-process"
+import { nodeFile, nodeWrite, fileExists } from "../util/node-fs"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -45,7 +47,23 @@ export namespace LSPServer {
     root: NearestRoot(["tsconfig.json", "package.json", "jsconfig.json"]),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(app, root) {
-      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", app.path.cwd).catch(() => {})
+      // Try to resolve typescript/lib/tsserver.js from node_modules
+      let tsserver: string | undefined
+      try {
+        tsserver = await import.meta.resolve?.("typescript/lib/tsserver.js")
+      } catch {
+        // Fallback: check common locations
+        const commonPaths = [
+          path.join(app.path.cwd, "node_modules", "typescript", "lib", "tsserver.js"),
+          path.join(process.cwd(), "node_modules", "typescript", "lib", "tsserver.js"),
+        ]
+        for (const p of commonPaths) {
+          if (await fileExists(p)) {
+            tsserver = p
+            break
+          }
+        }
+      }
       if (!tsserver) return
       const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
         cwd: root,
@@ -74,13 +92,13 @@ export namespace LSPServer {
     },
     extensions: [".go"],
     async spawn(_, root) {
-      let bin = Bun.which("gopls", {
+      let bin = await nodeWhich("gopls", {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
       if (!bin) {
-        if (!Bun.which("go")) return
+        if (!(await nodeWhich("go"))) return
         log.info("installing gopls")
-        const proc = Bun.spawn({
+        const proc = nodeSpawn({
           cmd: ["go", "install", "golang.org/x/tools/gopls@latest"],
           env: { ...process.env, GOBIN: Global.Path.bin },
           stdout: "pipe",
@@ -110,18 +128,18 @@ export namespace LSPServer {
     root: NearestRoot(["Gemfile"]),
     extensions: [".rb", ".rake", ".gemspec", ".ru"],
     async spawn(_, root) {
-      let bin = Bun.which("ruby-lsp", {
+      let bin = await nodeWhich("ruby-lsp", {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
       if (!bin) {
-        const ruby = Bun.which("ruby")
-        const gem = Bun.which("gem")
+        const ruby = await nodeWhich("ruby")
+        const gem = await nodeWhich("gem")
         if (!ruby || !gem) {
           log.info("Ruby not found, please install Ruby first")
           return
         }
         log.info("installing ruby-lsp")
-        const proc = Bun.spawn({
+        const proc = nodeSpawn({
           cmd: ["gem", "install", "ruby-lsp", "--bindir", Global.Path.bin],
           stdout: "pipe",
           stderr: "pipe",
@@ -168,7 +186,7 @@ export namespace LSPServer {
     extensions: [".ex", ".exs"],
     root: NearestRoot(["mix.exs", "mix.lock"]),
     async spawn(_, root) {
-      let binary = Bun.which("elixir-ls")
+      let binary = await nodeWhich("elixir-ls")
       if (!binary) {
         const elixirLsPath = path.join(Global.Path.bin, "elixir-ls")
         binary = path.join(
@@ -178,8 +196,8 @@ export namespace LSPServer {
           process.platform === "win32" ? "language_server.bar" : "language_server.sh",
         )
 
-        if (!(await Bun.file(binary).exists())) {
-          const elixir = Bun.which("elixir")
+        if (!(await fileExists(binary))) {
+          const elixir = await nodeWhich("elixir")
           if (!elixir) {
             log.error("elixir is required to run elixir-ls")
             return
@@ -190,19 +208,23 @@ export namespace LSPServer {
           const response = await fetch("https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip")
           if (!response.ok) return
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
-          await Bun.file(zipPath).write(response)
+          await nodeWrite(zipPath, Buffer.from(await response.arrayBuffer()))
 
-          await $`unzip -o -q ${zipPath}`.cwd(Global.Path.bin).nothrow()
+          await execa('unzip', ['-o', '-q', zipPath], {
+            cwd: Global.Path.bin,
+            reject: false
+          })
 
           await fs.rm(zipPath, {
             force: true,
             recursive: true,
           })
 
-          await $`mix deps.get && mix compile && mix elixir_ls.release2 -o release`
-            .quiet()
-            .cwd(path.join(Global.Path.bin, "elixir-ls-master"))
-            .env({ MIX_ENV: "prod", ...process.env })
+          await execa('bash', ['-c', 'mix deps.get && mix compile && mix elixir_ls.release2 -o release'], {
+            cwd: path.join(Global.Path.bin, "elixir-ls-master"),
+            env: { MIX_ENV: "prod", ...process.env },
+            stdio: 'pipe'
+          })
 
           log.info(`installed elixir-ls`, {
             path: elixirLsPath,
@@ -223,12 +245,12 @@ export namespace LSPServer {
     extensions: [".zig", ".zon"],
     root: NearestRoot(["build.zig"]),
     async spawn(_, root) {
-      let bin = Bun.which("zls", {
+      let bin = await nodeWhich("zls", {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
 
       if (!bin) {
-        const zig = Bun.which("zig")
+        const zig = await nodeWhich("zig")
         if (!zig) {
           log.error("Zig is required to use zls. Please install Zig first.")
           return
@@ -291,25 +313,33 @@ export namespace LSPServer {
         }
 
         const tempPath = path.join(Global.Path.bin, assetName)
-        await Bun.file(tempPath).write(downloadResponse)
+        await nodeWrite(tempPath, Buffer.from(await downloadResponse.arrayBuffer()))
 
         if (ext === "zip") {
-          await $`unzip -o -q ${tempPath}`.cwd(Global.Path.bin).nothrow()
+          await execa('unzip', ['-o', '-q', tempPath], {
+            cwd: Global.Path.bin,
+            reject: false
+          })
         } else {
-          await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).nothrow()
+          await execa('tar', ['-xf', tempPath], {
+            cwd: Global.Path.bin,
+            reject: false
+          })
         }
 
         await fs.rm(tempPath, { force: true })
 
         bin = path.join(Global.Path.bin, "zls" + (platform === "win32" ? ".exe" : ""))
 
-        if (!(await Bun.file(bin).exists())) {
+        if (!(await fileExists(bin))) {
           log.error("Failed to extract zls binary")
           return
         }
 
         if (platform !== "win32") {
-          await $`chmod +x ${bin}`.nothrow()
+          await execa('chmod', ['+x', bin], {
+            reject: false
+          })
         }
 
         log.info(`installed zls`, { bin })

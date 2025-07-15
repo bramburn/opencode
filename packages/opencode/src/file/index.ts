@@ -1,12 +1,13 @@
 import { z } from "zod"
 import { Bus } from "../bus"
-import { $ } from "bun"
+import { execa } from "execa"
 import { createPatch } from "diff"
 import path from "path"
 import * as git from "isomorphic-git"
 import { App } from "../app/app"
 import fs from "fs"
 import { Log } from "../util/log"
+import { nodeFile } from "../util/node-fs"
 
 export namespace File {
   const log = Log.create({ service: "file" })
@@ -37,7 +38,11 @@ export namespace File {
     const app = App.info()
     if (!app.git) return []
 
-    const diffOutput = await $`git diff --numstat HEAD`.cwd(app.path.cwd).quiet().nothrow().text()
+    const diffOutput = await execa('git', ['diff', '--numstat', 'HEAD'], {
+      cwd: app.path.cwd,
+      reject: false,
+      stdio: 'pipe'
+    }).then(r => r.stdout).catch(() => "")
 
     const changedFiles: Info[] = []
 
@@ -54,7 +59,11 @@ export namespace File {
       }
     }
 
-    const untrackedOutput = await $`git ls-files --others --exclude-standard`.cwd(app.path.cwd).quiet().nothrow().text()
+    const untrackedOutput = await execa('git', ['ls-files', '--others', '--exclude-standard'], {
+      cwd: app.path.cwd,
+      reject: false,
+      stdio: 'pipe'
+    }).then(r => r.stdout).catch(() => "")
 
     if (untrackedOutput.trim()) {
       const untrackedFiles = untrackedOutput.trim().split("\n")
@@ -75,7 +84,11 @@ export namespace File {
     }
 
     // Get deleted files
-    const deletedOutput = await $`git diff --name-only --diff-filter=D HEAD`.cwd(app.path.cwd).quiet().nothrow().text()
+    const deletedOutput = await execa('git', ['diff', '--name-only', '--diff-filter=D', 'HEAD'], {
+      cwd: app.path.cwd,
+      reject: false,
+      stdio: 'pipe'
+    }).then(r => r.stdout).catch(() => "")
 
     if (deletedOutput.trim()) {
       const deletedFiles = deletedOutput.trim().split("\n")
@@ -99,7 +112,7 @@ export namespace File {
     using _ = log.time("read", { file })
     const app = App.info()
     const full = path.join(app.path.cwd, file)
-    const content = await Bun.file(full)
+    const content = await nodeFile(full)
       .text()
       .catch(() => "")
       .then((x) => x.trim())
@@ -111,7 +124,11 @@ export namespace File {
         filepath: rel,
       })
       if (diff !== "unmodified") {
-        const original = await $`git show HEAD:${rel}`.cwd(app.path.root).quiet().nothrow().text()
+        const original = await execa('git', ['show', `HEAD:${rel}`], {
+          cwd: app.path.root,
+          reject: false,
+          stdio: 'pipe'
+        }).then(r => r.stdout).catch(() => "")
         const patch = createPatch(file, original, content, "old", "new", {
           context: Infinity,
         })

@@ -3,12 +3,14 @@
   "name": "opencode",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.2.14",
+  "packageManager": "pnpm@9.0.0",
   "scripts": {
-    "dev": "bun run packages/opencode/src/index.ts",
-    "typecheck": "bun run --filter='*' typecheck",
+    "dev": "pnpm --filter=@opencode/opencode dev",
+    "build": "pnpm --parallel --filter \"@opencode/*\" build",
+    "typecheck": "pnpm --parallel typecheck",
+    "test": "pnpm --parallel test",
     "stainless": "./scripts/stainless",
-    "postinstall": "./scripts/hooks"
+    "postinstall": "node scripts/hooks.mjs"
   },
   "workspaces": {
     "packages": [
@@ -23,7 +25,8 @@
   },
   "devDependencies": {
     "prettier": "3.5.3",
-    "sst": "3.17.8"
+    "sst": "3.17.8",
+    "typescript": "5.8.2"
   },
   "repository": {
     "type": "git",
@@ -41,5 +44,9 @@
   ],
   "patchedDependencies": {
     "ai@4.3.16": "patches/ai@4.3.16.patch"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.16.0",
+    "minimatch": "^10.0.3"
   }
 }

@@ -3,11 +3,14 @@ import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { Permission } from "../permission"
-import DESCRIPTION from "./write.txt"
+import { loadText } from "../util/text-loader"
+
+const DESCRIPTION = loadText("./write.txt", import.meta.url)
 import { App } from "../app/app"
 import { Bus } from "../bus"
 import { File } from "../file"
 import { FileTime } from "../file/time"
+import { nodeFile, nodeWrite } from "../util/node-fs"
 
 export const WriteTool = Tool.define({
   id: "write",
@@ -20,7 +23,7 @@ export const WriteTool = Tool.define({
     const app = App.info()
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(app.path.cwd, params.filePath)
 
-    const file = Bun.file(filepath)
+    const file = nodeFile(filepath)
     const exists = await file.exists()
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
@@ -35,7 +38,7 @@ export const WriteTool = Tool.define({
       },
     })
 
-    await Bun.write(filepath, params.content)
+    await nodeWrite(filepath, params.content)
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })

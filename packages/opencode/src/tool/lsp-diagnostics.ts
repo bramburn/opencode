@@ -3,7 +3,9 @@ import { Tool } from "./tool"
 import path from "path"
 import { LSP } from "../lsp"
 import { App } from "../app/app"
-import DESCRIPTION from "./lsp-diagnostics.txt"
+import { loadText } from "../util/text-loader"
+
+const DESCRIPTION = loadText("./lsp-diagnostics.txt", import.meta.url)
 
 export const LspDiagnosticTool = Tool.define({
   id: "lsp_diagnostics",

@@ -1,6 +1,8 @@
 import { z } from "zod"
 import { Tool } from "./tool"
-import DESCRIPTION_WRITE from "./todowrite.txt"
+import { loadText } from "../util/text-loader"
+
+const DESCRIPTION_WRITE = loadText("./todowrite.txt", import.meta.url)
 import { App } from "../app/app"
 
 const TodoInfo = z.object({

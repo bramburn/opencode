@@ -4,8 +4,11 @@ import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
-import DESCRIPTION from "./read.txt"
+import { loadText } from "../util/text-loader"
+
+const DESCRIPTION = loadText("./read.txt", import.meta.url)
 import { App } from "../app/app"
+import { nodeFile } from "../util/node-fs"
 
 const MAX_READ_SIZE = 250 * 1024
 const DEFAULT_READ_LIMIT = 2000
@@ -25,7 +28,7 @@ export const ReadTool = Tool.define({
       filePath = path.join(process.cwd(), filePath)
     }
 
-    const file = Bun.file(filePath)
+    const file = nodeFile(filePath)
     if (!(await file.exists())) {
       const dir = path.dirname(filePath)
       const base = path.basename(filePath)

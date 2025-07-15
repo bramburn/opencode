@@ -2,8 +2,12 @@ import { z } from "zod"
 import { Tool } from "./tool"
 import { App } from "../app/app"
 import { Ripgrep } from "../file/ripgrep"
+import { nodeSpawn } from "../util/node-process"
+import { promises as fs } from "fs"
 
-import DESCRIPTION from "./grep.txt"
+import { loadText } from "../util/text-loader"
+
+const DESCRIPTION = loadText("./grep.txt", import.meta.url)
 
 export const GrepTool = Tool.define({
   id: "grep",
@@ -28,13 +32,13 @@ export const GrepTool = Tool.define({
     }
     args.push(searchPath)
 
-    const proc = Bun.spawn([rgPath, ...args], {
+    const proc = nodeSpawn([rgPath, ...args], {
       stdout: "pipe",
       stderr: "pipe",
     })
 
-    const output = await new Response(proc.stdout).text()
-    const errorOutput = await new Response(proc.stderr).text()
+    const output = proc.stdout ? await new Response(proc.stdout).text() : ""
+    const errorOutput = proc.stderr ? await new Response(proc.stderr).text() : ""
     const exitCode = await proc.exited
 
     if (exitCode === 1) {
@@ -62,8 +66,7 @@ export const GrepTool = Tool.define({
       const lineNum = parseInt(parts[1], 10)
       const lineText = parts[2]
 
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => null)
+      const stats = await fs.stat(filePath).catch(() => null)
       if (!stats) continue
 
       matches.push({

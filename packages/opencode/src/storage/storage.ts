@@ -6,6 +6,8 @@ import z from "zod"
 import fs from "fs/promises"
 import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
+import { createGlob } from "../util/node-glob"
+import { nodeFile, nodeWrite } from "../util/node-fs"
 
 export namespace Storage {
   const log = Log.create({ service: "storage" })
@@ -19,17 +21,17 @@ export namespace Storage {
   const MIGRATIONS: Migration[] = [
     async (dir: string) => {
       try {
-        const files = new Bun.Glob("session/message/*/*.json").scanSync({
+        const files = createGlob("session/message/*/*.json").scanSync({
           cwd: dir,
           absolute: true,
         })
         for (const file of files) {
-          const content = await Bun.file(file).json()
+          const content = await nodeFile(file).json()
           if (!content.metadata) continue
           log.info("migrating to v2 message", { file })
           try {
             const result = MessageV2.fromV1(content)
-            await Bun.write(
+            await nodeWrite(
               file,
               JSON.stringify(
                 {
@@ -47,17 +49,17 @@ export namespace Storage {
       } catch {}
     },
     async (dir: string) => {
-      const files = new Bun.Glob("session/message/*/*.json").scanSync({
+      const files = createGlob("session/message/*/*.json").scanSync({
         cwd: dir,
         absolute: true,
       })
       for (const file of files) {
         try {
-          const { parts, ...info } = await Bun.file(file).json()
+          const { parts, ...info } = await nodeFile(file).json()
           if (!parts) continue
           for (const part of parts) {
             const id = Identifier.ascending("part")
-            await Bun.write(
+            await nodeWrite(
               [dir, "session", "part", info.sessionID, info.id, id + ".json"].join("/"),
               JSON.stringify({
                 ...part,
@@ -68,7 +70,7 @@ export namespace Storage {
               }),
             )
           }
-          await Bun.write(file, JSON.stringify(info, null, 2))
+          await nodeWrite(file, JSON.stringify(info, null, 2))
         } catch (e) {}
       }
     },
@@ -78,7 +80,7 @@ export namespace Storage {
     const app = App.info()
     const dir = path.normalize(path.join(app.path.data, "storage"))
     await fs.mkdir(dir, { recursive: true })
-    const migration = await Bun.file(path.join(dir, "migration"))
+    const migration = await nodeFile(path.join(dir, "migration"))
       .json()
       .then((x) => parseInt(x))
       .catch(() => 0)
@@ -86,7 +88,7 @@ export namespace Storage {
       log.info("running migration", { index })
       const migration = MIGRATIONS[index]
       await migration(dir)
-      await Bun.write(path.join(dir, "migration"), (index + 1).toString())
+      await nodeWrite(path.join(dir, "migration"), (index + 1).toString())
     }
     return {
       dir,
@@ -107,29 +109,37 @@ export namespace Storage {
 
   export async function readJSON<T>(key: string) {
     const dir = await state().then((x) => x.dir)
-    return Bun.file(path.join(dir, key + ".json")).json() as Promise<T>
+    return nodeFile(path.join(dir, key + ".json")).json() as Promise<T>
   }
 
   export async function writeJSON<T>(key: string, content: T) {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, key + ".json")
     const tmp = target + Date.now() + ".tmp"
-    await Bun.write(tmp, JSON.stringify(content, null, 2))
+    await nodeWrite(tmp, JSON.stringify(content, null, 2))
     await fs.rename(tmp, target).catch(() => {})
     await fs.unlink(tmp).catch(() => {})
     Bus.publish(Event.Write, { key, content })
   }
 
-  const glob = new Bun.Glob("**/*")
+  const glob = createGlob("**/*")
   export async function* list(prefix: string) {
     const dir = await state().then((x) => x.dir)
     try {
-      for await (const item of glob.scan({
+      for await (const item of glob.scanAsync({
         cwd: path.join(dir, prefix),
-        onlyFiles: true,
       })) {
-        const result = path.join(prefix, item.slice(0, -5))
-        yield result
+        // Only yield files (skip directories)
+        const fullPath = path.join(dir, prefix, item)
+        try {
+          const stat = await fs.stat(fullPath)
+          if (stat.isFile()) {
+            const result = path.join(prefix, item.slice(0, -5))
+            yield result
+          }
+        } catch {
+          // Skip if can't stat
+        }
       }
     } catch {
       return

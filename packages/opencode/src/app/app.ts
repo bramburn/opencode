@@ -6,6 +6,7 @@ import { Global } from "../global"
 import path from "path"
 import os from "os"
 import { z } from "zod"
+import { nodeWrite } from "../util/node-fs"
 
 export namespace App {
   const log = Log.create({ service: "app" })
@@ -129,7 +130,7 @@ export namespace App {
   export async function initialize() {
     const { info } = ctx.use()
     info.time.initialized = Date.now()
-    await Bun.write(
+    await nodeWrite(
       path.join(info.path.data, APP_JSON),
       JSON.stringify({
         initialized: Date.now(),

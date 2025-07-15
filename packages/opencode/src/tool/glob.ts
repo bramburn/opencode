@@ -2,8 +2,11 @@ import { z } from "zod"
 import path from "path"
 import { Tool } from "./tool"
 import { App } from "../app/app"
-import DESCRIPTION from "./glob.txt"
+import { loadText } from "../util/text-loader"
+
+const DESCRIPTION = loadText("./glob.txt", import.meta.url)
 import { Ripgrep } from "../file/ripgrep"
+import { promises as fs } from "fs"
 
 export const GlobTool = Tool.define({
   id: "glob",
@@ -34,8 +37,7 @@ export const GlobTool = Tool.define({
         break
       }
       const full = path.resolve(search, file)
-      const stats = await Bun.file(full)
-        .stat()
+      const stats = await fs.stat(full)
         .then((x) => x.mtime.getTime())
         .catch(() => 0)
       files.push({

@@ -17,6 +17,7 @@ import { File } from "../file"
 import { LSP } from "../lsp"
 import { MessageV2 } from "../session/message-v2"
 import { Mode } from "../session/mode"
+import { serve } from "@hono/node-server"
 
 const ERRORS = {
   400: {
@@ -732,10 +733,9 @@ export namespace Server {
   }
 
   export function listen(opts: { port: number; hostname: string }) {
-    const server = Bun.serve({
+    const server = serve({
       port: opts.port,
       hostname: opts.hostname,
-      idleTimeout: 0,
       fetch: app().fetch,
     })
     return server

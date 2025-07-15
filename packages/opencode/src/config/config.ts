@@ -9,6 +9,7 @@ import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "../util/error"
+import { nodeFile, nodeWrite } from "../util/node-fs"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -182,17 +183,15 @@ export namespace Config {
       mergeDeep(await load(path.join(Global.Path.config, "opencode.json"))),
     )
 
-    await import(path.join(Global.Path.config, "config"), {
-      with: {
-        type: "toml",
-      },
-    })
+    // Note: TOML import is not supported in Node.js
+    // This functionality would need to be implemented differently
+    Promise.resolve()
       .then(async (mod) => {
         const { provider, model, ...rest } = mod.default
         if (provider && model) result.model = `${provider}/${model}`
         result["$schema"] = "https://opencode.ai/config.json"
         result = mergeDeep(result, rest)
-        await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+        await nodeWrite(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
         await fs.unlink(path.join(Global.Path.config, "config"))
       })
       .catch(() => {})
@@ -201,7 +200,7 @@ export namespace Config {
   })
 
   async function load(configPath: string) {
-    let text = await Bun.file(configPath)
+    let text = await nodeFile(configPath)
       .text()
       .catch((err) => {
         if (err.code === "ENOENT") return
@@ -219,7 +218,7 @@ export namespace Config {
       for (const match of fileMatches) {
         const filePath = match.replace(/^"?\{file:/, "").replace(/\}"?$/, "")
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
-        const fileContent = await Bun.file(resolvedPath).text()
+        const fileContent = await nodeFile(resolvedPath).text()
         text = text.replace(match, JSON.stringify(fileContent))
       }
     }
@@ -240,7 +239,7 @@ export namespace Config {
       
       if (!parsed.data.$schema) {
         parsed.data.$schema = "https://opencode.ai/config.json"
-        await Bun.write(configPath, JSON.stringify(parsed.data, null, 2))
+        await nodeWrite(configPath, JSON.stringify(parsed.data, null, 2))
       }
       return parsed.data
     }

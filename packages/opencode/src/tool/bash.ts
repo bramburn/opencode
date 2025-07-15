@@ -1,7 +1,10 @@
 import { z } from "zod"
 import { Tool } from "./tool"
-import DESCRIPTION from "./bash.txt"
+import { loadText } from "../util/text-loader"
+
+const DESCRIPTION = loadText("./bash.txt", import.meta.url)
 import { App } from "../app/app"
+import { nodeSpawn } from "../util/node-process"
 
 const MAX_OUTPUT_LENGTH = 30000
 const DEFAULT_TIMEOUT = 1 * 60 * 1000
@@ -22,7 +25,7 @@ export const BashTool = Tool.define({
   async execute(params, ctx) {
     const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
 
-    const process = Bun.spawn({
+    const process = nodeSpawn({
       cmd: ["bash", "-c", params.command],
       cwd: App.info().path.cwd,
       maxBuffer: MAX_OUTPUT_LENGTH,
@@ -31,16 +34,17 @@ export const BashTool = Tool.define({
       stdout: "pipe",
       stderr: "pipe",
     })
-    await process.exited
-    const stdout = await new Response(process.stdout).text()
-    const stderr = await new Response(process.stderr).text()
+
+    const exitCode = await process.exited
+    const stdout = process.stdout ? await new Response(process.stdout).text() : ""
+    const stderr = process.stderr ? await new Response(process.stderr).text() : ""
 
     return {
       title: params.command,
       metadata: {
         stderr,
         stdout,
-        exit: process.exitCode,
+        exit: exitCode,
         description: params.description,
       },
       output: [`<stdout>`, stdout ?? "", `</stdout>`, `<stderr>`, stderr ?? "", `</stderr>`].join("\n"),

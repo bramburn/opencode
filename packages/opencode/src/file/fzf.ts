@@ -5,6 +5,8 @@ import { z } from "zod"
 import { NamedError } from "../util/error"
 import { lazy } from "../util/lazy"
 import { Log } from "../util/log"
+import { nodeFile, nodeWrite, fileExists } from "../util/node-fs"
+import { nodeSpawn, readableStreamToText } from "../util/node-process"
 
 export namespace Fzf {
   const log = Log.create({ service: "fzf" })
@@ -47,8 +49,7 @@ export namespace Fzf {
     }
     filepath = path.join(Global.Path.bin, "fzf" + (process.platform === "win32" ? ".exe" : ""))
 
-    const file = Bun.file(filepath)
-    if (!(await file.exists())) {
+    if (!(await fileExists(filepath))) {
       const archMap = { x64: "amd64", arm64: "arm64" } as const
       const arch = archMap[process.arch as keyof typeof archMap] ?? "amd64"
 
@@ -65,31 +66,31 @@ export namespace Fzf {
 
       const buffer = await response.arrayBuffer()
       const archivePath = path.join(Global.Path.bin, filename)
-      await Bun.write(archivePath, buffer)
+      await nodeWrite(archivePath, Buffer.from(buffer))
       if (config.extension === "tar.gz") {
-        const proc = Bun.spawn(["tar", "-xzf", archivePath, "fzf"], {
+        const proc = nodeSpawn(["tar", "-xzf", archivePath, "fzf"], {
           cwd: Global.Path.bin,
           stderr: "pipe",
           stdout: "pipe",
         })
-        await proc.exited
-        if (proc.exitCode !== 0)
+        const exitCode = await proc.exited
+        if (exitCode !== 0)
           throw new ExtractionFailedError({
             filepath,
-            stderr: await Bun.readableStreamToText(proc.stderr),
+            stderr: proc.stderr ? await readableStreamToText(proc.stderr) : "",
           })
       }
       if (config.extension === "zip") {
-        const proc = Bun.spawn(["unzip", "-j", archivePath, "fzf.exe", "-d", Global.Path.bin], {
+        const proc = nodeSpawn(["unzip", "-j", archivePath, "fzf.exe", "-d", Global.Path.bin], {
           cwd: Global.Path.bin,
           stderr: "pipe",
           stdout: "ignore",
         })
-        await proc.exited
-        if (proc.exitCode !== 0)
+        const exitCode = await proc.exited
+        if (exitCode !== 0)
           throw new ExtractionFailedError({
             filepath: archivePath,
-            stderr: await Bun.readableStreamToText(proc.stderr),
+            stderr: proc.stderr ? await readableStreamToText(proc.stderr) : "",
           })
       }
       await fs.unlink(archivePath)

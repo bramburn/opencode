@@ -1,5 +1,7 @@
 import { Tool } from "./tool"
-import DESCRIPTION from "./task.txt"
+import { loadText } from "../util/text-loader"
+
+const DESCRIPTION = loadText("./task.txt", import.meta.url)
 import { z } from "zod"
 import { Session } from "../session"
 import { Bus } from "../bus"

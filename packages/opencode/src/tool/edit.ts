@@ -8,11 +8,14 @@ import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch } from "diff"
 import { Permission } from "../permission"
-import DESCRIPTION from "./edit.txt"
+import { loadText } from "../util/text-loader"
+
+const DESCRIPTION = loadText("./edit.txt", import.meta.url)
 import { App } from "../app/app"
 import { File } from "../file"
 import { Bus } from "../bus"
 import { FileTime } from "../file/time"
+import { nodeFile, nodeWrite } from "../util/node-fs"
 
 export const EditTool = Tool.define({
   id: "edit",
@@ -51,14 +54,14 @@ export const EditTool = Tool.define({
     await (async () => {
       if (params.oldString === "") {
         contentNew = params.newString
-        await Bun.write(filepath, params.newString)
+        await nodeWrite(filepath, params.newString)
         await Bus.publish(File.Event.Edited, {
           file: filepath,
         })
         return
       }
 
-      const file = Bun.file(filepath)
+      const file = nodeFile(filepath)
       const stats = await file.stat().catch(() => {})
       if (!stats) throw new Error(`File ${filepath} not found`)
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filepath}`)
@@ -66,11 +69,11 @@ export const EditTool = Tool.define({
       contentOld = await file.text()
 
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
-      await file.write(contentNew)
+      await nodeWrite(filepath, contentNew)
       await Bus.publish(File.Event.Edited, {
         file: filepath,
       })
-      contentNew = await file.text()
+      contentNew = await nodeFile(filepath).text()
     })()
 
     const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))

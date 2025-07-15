@@ -5,8 +5,10 @@ import fs from "fs/promises"
 import { z } from "zod"
 import { NamedError } from "../util/error"
 import { lazy } from "../util/lazy"
-import { $ } from "bun"
+import { execa } from "execa"
 import { Fzf } from "./fzf"
+import { nodeFile, nodeWrite, fileExists } from "../util/node-fs"
+import { nodeSpawn, readableStreamToText } from "../util/node-process"
 
 export namespace Ripgrep {
   const Stats = z.object({
@@ -126,8 +128,7 @@ export namespace Ripgrep {
     if (filepath) return { filepath }
     filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
 
-    const file = Bun.file(filepath)
-    if (!(await file.exists())) {
+    if (!(await fileExists(filepath))) {
       const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
       const config = PLATFORM[platformKey]
       if (!config) throw new UnsupportedPlatformError({ platform: platformKey })
@@ -141,23 +142,23 @@ export namespace Ripgrep {
 
       const buffer = await response.arrayBuffer()
       const archivePath = path.join(Global.Path.bin, filename)
-      await Bun.write(archivePath, buffer)
+      await nodeWrite(archivePath, Buffer.from(buffer))
       if (config.extension === "tar.gz") {
         const args = ["tar", "-xzf", archivePath, "--strip-components=1"]
 
         if (platformKey.endsWith("-darwin")) args.push("--include=*/rg")
         if (platformKey.endsWith("-linux")) args.push("--wildcards", "*/rg")
 
-        const proc = Bun.spawn(args, {
+        const proc = nodeSpawn(args, {
           cwd: Global.Path.bin,
           stderr: "pipe",
           stdout: "pipe",
         })
-        await proc.exited
-        if (proc.exitCode !== 0)
+        const exitCode = await proc.exited
+        if (exitCode !== 0)
           throw new ExtractionFailedError({
             filepath,
-            stderr: await Bun.readableStreamToText(proc.stderr),
+            stderr: proc.stderr ? await readableStreamToText(proc.stderr) : "",
           })
       }
       if (config.extension === "zip") {
@@ -199,7 +200,11 @@ export namespace Ripgrep {
     if (input.query) commands.push(`${await Fzf.filepath()} --filter=${input.query}`)
     if (input.limit) commands.push(`head -n ${input.limit}`)
     const joined = commands.join(" | ")
-    const result = await $`${{ raw: joined }}`.cwd(input.cwd).nothrow().text()
+    const result = await execa('bash', ['-c', joined], {
+      cwd: input.cwd,
+      reject: false,
+      stdio: 'pipe'
+    }).then(r => r.stdout).catch(() => "")
     return result.split("\n").filter(Boolean)
   }
 
@@ -319,12 +324,16 @@ export namespace Ripgrep {
     args.push(input.pattern)
 
     const command = args.join(" ")
-    const result = await $`${{ raw: command }}`.cwd(input.cwd).quiet().nothrow()
+    const result = await execa('bash', ['-c', command], {
+      cwd: input.cwd,
+      reject: false,
+      stdio: 'pipe'
+    })
     if (result.exitCode !== 0) {
       return []
     }
 
-    const lines = result.text().trim().split("\n").filter(Boolean)
+    const lines = result.stdout.trim().split("\n").filter(Boolean)
     // Parse JSON lines from ripgrep output
 
     return lines

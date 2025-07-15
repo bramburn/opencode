@@ -2,7 +2,8 @@ import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
 import { z } from "zod"
-import { data } from "./models-macro" with { type: "macro" }
+import { data } from "./models-macro"
+import { nodeFile, nodeWrite } from "../util/node-fs"
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
@@ -50,7 +51,7 @@ export namespace ModelsDev {
   export type Provider = z.infer<typeof Provider>
 
   export async function get() {
-    const file = Bun.file(filepath)
+    const file = nodeFile(filepath)
     const result = await file.json().catch(() => {})
     if (result) {
       refresh()
@@ -62,9 +63,11 @@ export namespace ModelsDev {
   }
 
   async function refresh() {
-    const file = Bun.file(filepath)
     log.info("refreshing")
     const result = await fetch("https://models.dev/api.json").catch(() => {})
-    if (result && result.ok) await Bun.write(file, result)
+    if (result && result.ok) {
+      const buffer = await result.arrayBuffer()
+      await nodeWrite(filepath, Buffer.from(buffer))
+    }
   }
 }

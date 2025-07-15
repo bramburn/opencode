@@ -15,8 +15,10 @@ import {
   type StreamTextResult,
 } from "ai"
 
-import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
-import PROMPT_PLAN from "../session/prompt/plan.txt"
+import { loadText } from "../util/text-loader"
+
+const PROMPT_INITIALIZE = loadText("../session/prompt/initialize.txt", import.meta.url)
+const PROMPT_PLAN = loadText("../session/prompt/plan.txt", import.meta.url)
 
 import { App } from "../app/app"
 import { Bus } from "../bus"
